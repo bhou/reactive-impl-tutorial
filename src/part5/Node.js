@@ -1,3 +1,4 @@
+//@flow
 const EventEmitter = require("eventemitter3");
 const uuid = require("node-uuid");
 
@@ -23,6 +24,8 @@ class Node {
   onReceive(signal : any) : Node {
     if (signal instanceof Error) {
       this.onError(signal);
+      this.request();
+      //$FlowIgnore
     } else if (signal === Node.END) {
       try {
         this.onEnd(signal);
@@ -69,14 +72,43 @@ class Node {
     return this;
   }
 
-  to(node : Node) : Node {
+  to(downstream : Node) : Node {
     this.ee.on("outgoing-" + this.id, (signal) => {
-      node.push(signal);
+      downstream.push(signal);
     });
-    return node;
+    // for pull model
+    downstream.ee.on("request-" + downstream.id, (cmd) => {
+      this.pull(cmd);
+    });
+    downstream.from(this);
+    return downstream;
+  }
+
+  pull(cmd : any) : Node {
+    setImmediate(() => {
+      this.onRequest(cmd);
+    });
+    return this;
+  }
+
+  onRequest(cmd : any) : Node {
+    this.request(cmd);
+    return this;
+  }
+
+  request(cmd : any) : Node {
+    setImmediate(() => {
+      this.ee.emit("request-" + this.id, cmd);
+    });
+    return this;
+  }
+
+  from(upstream : any) : Node {
+    return this;
   }
 }
 
+//$FlowIgnore
 Node.END = "__NODE_END__";
 
 module.exports = Node;
